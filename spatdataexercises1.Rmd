@@ -1,0 +1,46 @@
+---
+title: "Spatial data in R (Exercises), Part 1"
+author: John Loeser
+date: June 12, 2017
+output: html_notebook
+---
+
+1. Produce code such that the line below draws the figure which follows it.
+
+```{r, message = F, warning = F, results = "hide", echo = F}
+library(sp)
+library(tidyverse)
+head <- matrix(c(0, 0, 0, 4, 4, 4, 4, 0), ncol = 2, byrow = T) %>%
+  Polygon %>% list %>% Polygons("head")
+eye1 <- matrix(c(3, 3, 3, 2.5, 2.5, 2.5, 2.5, 3), ncol = 2, byrow = T) %>%
+  Polygon %>% list %>% Polygons("eye1")
+eye2 <- matrix(c(3, 3, 3, 2.5, 2.5, 2.5, 2.5, 3) - c(1.5, 0), ncol = 2, byrow = T) %>%
+  Polygon %>% list %>% Polygons("eye2")
+mouth <- matrix(c(1, 1.5, 1, 0.5, 3, 0.5, 3, 1.5, 2.5, 1.5,
+                  2.5, 1, 1.5, 1, 1.5, 1.5), ncol = 2, byrow = T) %>%
+  Polygon %>% list %>% Polygons("mouth")
+face <- SpatialPolygons(list(head, eye1, eye2, mouth))
+face$col <- c("yellow", "black", "black", "black")
+face$col <- as.character(face$col)
+```
+
+```{r}
+plot(face, col = face$col, axes = T)
+```
+
+- Hint: the argument "col" to plot can be passed a vector of color names
+- Hint: after you create the column "col" in "face\@data", run "face\$col <- as.character(face\$col)"; this will convert the column into a character/string (instead of a factor)
+- Hint: geometries will be plotted in the order they appear in the "\@plotorder" attribute
+    
+2. With two lines of code, modify the face object directly so that the output changes to
+
+```{r, echo = F}
+face@polygons[[4]]@Polygons[[1]]@coords[,2] <- 2 - face@polygons[[4]]@Polygons[[1]]@coords[,2]
+face$col[1] <- "blue"
+```
+
+```{r}
+plot(face, col = as.character(face$col), axes = T)
+```
+
+- Hint: The second line should change the color of the face; the first should flip the frown. What transformation of the coordinates of the mouth will flip it? Where are the coordinates of the mouth stored?

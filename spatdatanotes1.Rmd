@@ -1,0 +1,176 @@
+---
+title: "Spatial data in R (Notes), Part 2"
+author: John Loeser
+date: June 12, 2017
+output: html_notebook
+---
+
+## Getting started
+
+1. Install R
+
+Visit [https://cran.rstudio.com/](https://cran.rstudio.com/) to install R. Follow the instructions for your operating system.
+
+2. Install RStudio
+
+Visit [https://www.rstudio.com/](https://www.rstudio.com/) to install RStudio. RStudio is an IDE for R that we'll be working with.
+
+3. Open RStudio
+
+You'll see four panes. The top left is the editor. The bottom left is the console. The top right is the environment. The bottom right contains miscellaneous features, but primarily it's where plotting output will appear. Of the four, the one that's new to R relative to Stata is the environment - in Stata language, this the list of all macros you've created.
+
+You'll now be able to open spatialdatanotes.Rmd in RStudio. If you open that, you'll be able to both read through these notes and easily test out the code. It's best to follow along with that going forward.
+
+4. "Hello world!"
+
+Let's start with some basics. Try running the following code in the console:
+
+```{r}
+"Hello world!"
+print("Hello world!")
+x <- 2 + 2
+print(x)
+```
+
+5. Data structures
+
+In programming languages, "data structures" are used to store sets that are more complicated than singletons. There are three main types of data structures we'll run into in R - vectors, matrices, and lists.
+
+Vectors are single dimensional and contain a single type of data. Typical classes of vectors include "integer" (integers), "numeric" (floats/numbers), and "character" (strings). R has another class called "factor", which is hard to work with, and we won't talk much about. Vectors can be consructed using the function "c", which is short for "concatenate".
+
+```{r}
+x <- c(1, 2, 5)
+print(x)
+# get the third element
+print(x[3])
+# change an element
+x[2] <- 4
+print(x)
+# operation applied to each element
+print(x + 1)
+# vectors addition works as expected
+print(x + c(-1, 2, 3))
+# class is a function that returns the class of objects
+print(class(x))
+```
+
+Matrices work like two dimensional vectors, for today we'll only need to know how to create them and print them.
+
+```{r}
+x <- c(0, 0, 2, 0, 1, 1)
+print(matrix(x, ncol = 2))
+print(matrix(x, ncol = 2, byrow = T))
+```
+
+Lists are similar to vectors, but each element can have an arbitrary data type (and can even be a list!). For example, consider the below example.
+
+```{r}
+x <- list(1, c(2, 3), list(4, c(5, 6)))
+print(x)
+```
+
+x is a 3 element list. The first element is just "1" - a numeric vector of length 1. The second element is "c(2, 3)" - a numeric vector of length 2. The third element is "list(4, c(5, 6))" - a 2 element list, the first element of which is "4", and the second element of which is "c(5, 6)". Accessing elements of a list is slightly different from vectors
+
+```{r}
+# get a sublist
+print(x[1])
+print(x[c(1, 3)])
+# get an element of a list
+print(x[[1]])
+```
+
+With vectors, there's no distinction between an element and a length one subvector. With lists, because these two things are different, you can use "[ ]" to get a sublist, and "[[ ]]" to get an element.
+
+6. Data frames
+
+A lot of what we'll want to do using R is working with data. In contrast to Stata, the data we work with in R is stored in the environment just like any other variables. The objects used to store data are called "data frames". As in Stata, "data frames" are encoded as a list of columns. Each column is either a vector or a list. The length of each column is the same - the number of rows in the data frame. To give an example, a column containing average incomes would be a numeric vector, while a column containing polygons for each row would be a list. Let's see how to replicate some basic Stata operations.
+
+```{r}
+# data.frame is used to construct a data frame
+# row.names is a special argument for the row names
+df <- data.frame(row.names = c("a", "b"), x = c(1, 2), y = c("f", "g"))
+print(df)
+# gen (two identical approaches)
+df[,"z"] <- df[,"x"] + 1
+print(df)
+df$z <-  df$x + 1
+print(df)
+# keep
+df2 <- subset(df, z == 3)
+print(df2)
+# append
+df3 <- rbind(df, data.frame(row.names = "c", x = 3, y = "h", z = 4))
+print(df3)
+```
+
+7. Installing libraries
+
+Libraries in R are the equivalent of packages in Stata. Installing libraries in R is typically straightforward. Two notable exceptions are two libraries we'll be using today - rgdal (used for reading shapefiles) and rgeos (used for manipulating shapefiles). The first thing to try is the easy approach, but this may not work.
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+# install.packages(c("sp", "rgdal", "rgeos", "tidyverse"))
+```
+
+You'll probably get an error. If you're on Mac, try [http://www.janosgyerik.com/installing-rgdal-in-r-on-os-x-mavericks/](http://www.janosgyerik.com/installing-rgdal-in-r-on-os-x-mavericks/) these instructions first. If those don't work, try [https://beanumber.github.io/sds192/rgdal-install.html](https://beanumber.github.io/sds192/rgdal-install.html). If you're on Windows, and this didn't work, install Linux. If you're on Linux, run "sudo apt-get update" then "sudo apt-get install libgdal-dev libproj-dev" in the console; after that, it should work.
+
+## Shapefiles
+
+Typically, spatial data will be stored in ESRI Shapefiles. These shapefiles consist of a series of files (which together are often referred to as a "layer"), most importantly a .shp file and a .dbf file. The .dbf file is similar to a .dta - it contains a database, however each row is now associated with a particular shape. The .shp file contains the geometries, the data which defines each shape.
+
+```{r, echo = F}
+# ADD THIS LINE TO CHANGE RANK DIRECTION : graph[rankdir = LR]
+DiagrammeR::grViz("
+digraph {
+A[label = 'SpatialPolygonsDataFrame']
+B[label = '@polygons\nclass: list']
+C[label = 'Polygons']
+D[label = '@Polygons\nclass: list']
+E[label = 'Polygon']
+F[label = '@coords\nclass: matrix']
+G[label = '@data\nclass: data.frame']
+H[label = '@proj4string\nclass: CRS']
+A->B A->G A->H B->C C->D D->E E->F
+}
+", height = 400)
+```
+
+R's data structures for storing spatial data follows this approach. The most common object we'll be working with is a SpatialPolygonsDataFrame, which I'll refer to as an "SPDF". An SPDF has 3 main attributes (note that attributes are different from elements of a list or a vector - they are accessed using "\@"). First, "\@proj4string" stores the coordinate reference system ("CRS") of the shapefile. A CRS defines how coordinates relate to locations - for example, "+proj=longlat +datum=WGS84", the most common CRS you'll see, has coordinates as longitude and latitude. Other useful projections include equal area projections (see [https://www.youtube.com/watch?v=vVX-PrBRtTY](https://www.youtube.com/watch?v=vVX-PrBRtTY)) and, for analysis of relative small areas where the Earth is approximately flat, UTM (which gives coordinates in meters). 
+
+## Some simple examples
+
+Let's work through an example where we create an SPDF.
+
+1. We need to create a Polygon object. We'll use the Polygon constructor, which takes as an argument a matrix of coordinates.
+2. We'll need to create a Polygons object. We'll use the Polygons constructor, which takes as arguments 1) a list of Polygon objects, and 2) an ID for the Polygons object.
+3. We'll create a SpatialPolygons object. We'll use the SpatialPolygons constructor, which takes as arguments 1) a list of Polygons objects, and 2) a CRS. The latter argument is optional - we'll use it when we're working with real spatial data, but when creating some fake spatial data, this doesn't matter.
+4. We'll create a SpatialPolygonsDataFrame object. We can create this in two ways.
+    - We can use the SpatialPolygonsDataFrame constructor, which takes as arguments 1) a SpatialPolygons object, and 2) a data frame, where the IDs of the SpatialPolygons object must be the same as the row names of the data frame (since a row of a data frame corresponds to an element of the SpatialPolygons object).
+    - We can use the same notation we used to create a new column of a data frame to create a new column in the SpatialPolygons object.
+    
+To do all this, we'll also first need to load in the library sp, which contains these constructor functions, and tidyverse, which contains some useful miscellaneous R libraries (which includes "alpha", a function that lets us create transparent colors for use in "plot").
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+library(sp)
+library(tidyverse)
+```
+
+```{r}
+p1 <- Polygon(matrix(c(0,0,0,1,1,1,1,0), ncol = 2, byrow = T))
+p2 <- Polygon(matrix(c(2,0,3,0,2.5,1), ncol = 2, byrow = T))
+q1 <- Polygon(matrix(c(0.5,0.5,2.25,0.5,2.25,1.5,0.5,1.5), ncol = 2, byrow = T))
+p1 <- Polygons(list(p1), "p1")
+p2 <- Polygons(list(p2), "p2")
+q1 <- Polygons(list(q1), "q1")
+p <- SpatialPolygons(list(p1, p2))
+q <- SpatialPolygons(list(q1))
+# the below line is the same as "p$shape <- c("Square", "Triangle")"
+p <- SpatialPolygonsDataFrame(p, data.frame(row.names = c("p1", "p2"), shape = c("Rectangle", "Triangle")))
+# the below line is the same as "q$shape <- "Rectangle""
+q <- SpatialPolygonsDataFrame(q, data.frame(row.names = c("q1"), shape = c("Rectangle")))
+pq <- rbind(p, q)
+print(pq@data)
+# pq@data[,"shape"] is just c("Rectangle", "Triangle", "Rectangle")
+# plotcols will just be c(1, 2, 1); this is how "match" works
+plotcols <- match(pq@data[,"shape"], c("Rectangle", "Triangle"))
+plot(pq, col = alpha(plotcols, 0.5), axes = T)
+```

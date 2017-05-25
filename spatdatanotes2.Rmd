@@ -1,0 +1,175 @@
+---
+title: "Spatial data in R (Notes), Part 2"
+author: John Loeser
+date: June 12, 2017
+output: html_notebook
+---
+
+## Reading in spatial data
+
+First, we're going to load in a few libraries. sp and tidyverse we've seen before. rgdal is used for reading and writing spatial data. rgeos is used for manipulating spatial data. ggmap makes calls to Google Maps's API.
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+library(sp)
+library(tidyverse)
+library(rgdal)
+library(rgeos)
+library(ggmap)
+```
+
+We'll now try reading in a spatial data set. Lets use one we created for the Rwanda/Irrigation project, which contains maps of water user groups (WUGs) in rural Rwanda. Let's load it in, and look at it a bit to get a handle on it.
+
+```{r, fig.width = 5, fig.height = 5}
+wug <- readOGR("/home/jal/Dropbox/teach/2017.1/spatialTutorial/data/wug/", "wug", verbose = F)
+# let's plot it
+plot(wug, axes = T)
+# it's an SPDF
+print(class(wug))
+# we'll use "length" to get the number of elements
+print(length(wug))
+# we'll use "head" to get the first 6 rows 
+print(head(wug@data))
+# as we can see from the plot, it's longitudes and latitudes
+print(wug@proj4string)
+```
+
+What can we see? There's two groups of WUG - to focus on the upper left group, we're just going to look at WUG where the centroid is west of 29.55 degrees east. We can see we've got a SPDF, so we can look at the data frame. There appear to be a number of variables, some of which we'll make use of later. It's in longitudes and latitudes, which are useful for comparing and merging spatial data sets, but when looking at distances or calculating areas, we'll want to reproject into UTM.
+
+## Basic operations
+
+1. gCentroid and subset
+
+The centroid is the center of a shape. We just want shapes which are west of 29.55 degrees east. First, we'll get the centroid. We'll use gCentroid for this. This will return a SpatialPointsDataFrame (which, we won't abbreviate so we don't get it confused with an SPDF), from which we'll want the \@coords attribute.
+
+```{r}
+centroids <- gCentroid(wug)
+centroids <- centroids@coords
+print(head(centroids))
+```
+
+Why did we only get one observation? By default, most of R's functions for manipulating sp objects (such as SPDFs) treat it as a single geometry, instead of operating on each geometry individually. To do this, we'll use the "byid" argument of gCentroid.
+
+```{r}
+centroids <- gCentroid(wug, byid = T)
+centroids <- centroids@coords
+print(head(centroids))
+```
+
+Great! Let's add these to the data in our SPDF now, then take the subset of our SPDF where the longitude of the centroid is less than 29.55 degrees east. Note that subset works on SPDF in the same way it works on data frames.
+
+```{r, fig.width = 5, fig.height = 5}
+wug$clong <- centroids[,1]
+wug$clat <- centroids[,2]
+wug <- subset(wug, clong <= 29.55)
+plot(wug, axes = T)
+```
+
+Great! This is a little more manageable - we can start to see individual WUG now. Let's go further, and focus on a single area - the WUG "K12SP1-2-X"s.
+
+```{r, fig.width = 5, fig.height = 5}
+wug <- subset(wug, substr(sp, 1, 9) == "K12SP1-2-", fixed = T)
+plot(wug, axes = T)
+```
+
+2. ggplot and ggmap
+
+One useful function to know with local spatial data is ggmap. Working with it can be a bit cumbersome, so I'll demonstrate how to use it, and you can unpack it later if you're interested.
+
+```{r, message = F}
+# get the boundary box
+bwug <- bbox(wug)
+# get the maximum number of degrees on a side of the box
+zoom <- max(bwug["x", "max"] - bwug["x", "min"], bwug["y", "max"] - bwug["y", "min"])
+# this returns the appropriate zoom for the Google Maps API
+zoom <- min(19, (18 - ceiling(log(zoom / .0036) / log(2))))
+# this gets satellite imagery from the Google Maps API
+gmap <- get_map(location = c(lon = mean(bwug["x",]), lat = mean(bwug["y",])),
+                  zoom = zoom, maptype = "satellite")
+# this puts the satellite imagery into a format ggplot can use
+gmap <- ggmap(gmap)
+# fortify turns SPDF into a data frame we can pass to ggplot
+gwug <- fortify(wug)
+# this creates a ggplot object we can display : gmap has the imagery, geom_polygon creates polygons in a ggplot plot
+g <- gmap +
+  geom_polygon(data = gwug, aes(x = long, y = lat, group = group), col = "black", fill = "black", alpha = 0.2)
+g
+```
+
+3. spTransform
+
+Before going further, for much of the following analysis we'll want to have units that make sense. To do this, we're going to project wug into a CRS that's more useful for analysis. Using [http://www.dmap.co.uk/utmworld.htm](http://www.dmap.co.uk/utmworld.htm), we can see these coordinates are in UTM Zone 35, so we'll use the CRS "+proj=utm +zone=35 +datum=WGS84".
+
+```{r}
+wug <- spTransform(wug, "+proj=utm +zone=35 +datum=WGS84")
+plot(wug, axes = T)
+```
+
+We've now got a better idea of the distances between these WUG They're all within about 800m of each other, so these are all pretty small WUG. In practice, each of these will actually contain a large number of plots!
+
+4. gIntersection
+
+It looks like there's some intersection between the plots, probably due to enumerator error. How significant are these intersections? To do this, we want to intersect wug with itself! We'll use the argument "byid = T", but we'll want to remove cases where a plot is being intersected with itself. Finally, we'll want to visualize this. How can we do this?
+
+```{r}
+# get the intersection (drop_lower_td will drop lower topological dimension outputs of intersection)
+wugint <- gIntersection(wug, wug, byid = T, drop_lower_td = T)
+# we end up with a SpatialPolygons
+print(class(wugint))
+# no data, so lets check the names
+print(names(wugint))
+```
+
+The names of the output are space separated names of the original polygons. We want to get rid of cases where the two names are identical.
+
+```{r}
+# convert wugint to an SPDF with one column, corresponding to the names of the polygons in wugint
+wugint$name <- names(wugint)
+# use "separate" from dplyr to create two new columns, "name1" and "name2"
+wugint@data <- separate(wugint@data, name, into = c("name1", "name2"), sep = " ")
+# drop observations where name1 and name2 are equal
+wugint <- subset(wugint, name1 != name2)
+# plot the original wug along with the intersections in red
+plot(wug, axes = T)
+plot(wugint, col = "red", add = T)
+```
+
+Looks like a couple small areas. How large are these areas exactly?
+
+5. gArea and gUnion
+
+We can use gUnion to "union" some geometries. A special case of this is gUnaryUnion - this takes a single SpatialPolygons, and merges all the elements into one SpatialPolygons object. We can use gArea to calculate the area of a geometry. Let's try this with wug and wugint, both with and without gUnaryUnion.
+
+```{r}
+# try gArea(.) and sum(gArea(., byid = T)) and compare results, after dividing by 1e4 (to get hectares)
+wugarea <- gArea(wug)
+wugareabyid <- gArea(wug, byid = T)
+wugareabyid <- sum(wugareabyid)
+print(wugarea / 1e4)
+print(wugareabyid / 1e4)
+# try gArea(.) and gArea(gUnaryUnion(.)) and compare results; why is gUnaryUnion smaller?
+wugareaunion <- gArea(gUnaryUnion(wug))
+print(wugarea / 1e4)
+print(wugareaunion / 1e4)
+# what about gArea(gUnaryUnion(.)) for wugint?
+wugintarea <- gArea(wugint) / 2
+print(wugarea / wugareaunion)
+print((wugarea - wugintarea) / wugareaunion)
+```
+
+A few notes. "gArea(.)" just sums the areas of each geometry in wug. "gArea(., byid = T)" returns the area of each geometry. "gArea(gUnaryUnion(.))" returns a different area, because after unioning, we won't count overlaps multiple times. Alternatively, we can substract "gArea(wugintarea) / 2" from "gArea(wug)" - the former is the area of the intersections (divided by 2, since the intersection of WUG A with WUG B and WUG B with WUG A both appear in "wugint"), while the latter is the area of the WUG, with intersections counted multiple times. Subtracting off these intersections corrects for this multiple counting, and we end up with the area of the union.
+
+6. gBuffer and gDifference
+
+Two more common transformations are "gBuffer" and "gDifference". "gBuffer" creates a new SpatialPolygons with a buffer around each geometry. This is most useful when working with SpatialPoints or SpatialLines - we can create a polygon consisting of all points within 100km of cities with more than one million people, or all points within 5km of a paved road. "gDifference" gets all points in the first polygon, but not the second. We'll use this to get all the points within 200m of the first WUG in "wug" that aren't in another WUG in "wug".
+
+```{r}
+# get a buffer around the first element of wug
+# note that getting the first element uses the same notation as for data frames
+wug1buffer <- gBuffer(wug[1,], width = 200)
+# get the difference between this buffer and wug
+wug1buffer <- gDifference(wug1buffer, wug)
+# plot wug, then plot the first element of wug in green, then plot the buffer in red
+plot(wug, axes = T)
+plot(wug[1,], col = "green", add = T)
+plot(wug1buffer, col = "red", add = T)
+```

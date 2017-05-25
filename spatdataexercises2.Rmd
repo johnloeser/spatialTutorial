@@ -1,0 +1,118 @@
+---
+title: "Spatial data in R (Exercises), Part 2"
+author: John Loeser
+date: June 12, 2017
+output: html_notebook
+---
+
+1. Download the Rwanda Sector Boundaries from [here](http://geodata-nisr.opendata.arcgis.com/datasets/7083c6f446ae41c1bc69649f577f8a68_0.zip) and Rwandan school locations [here](http://geodata-nisr.opendata.arcgis.com/datasets/1760c0baa0fa4f379e2a5f802e7001fc_0.zip). Unzip the .zip files into their own folders. Create a "folder" variable which contains the directory where you're storing this data. Reproduce the lines below.
+
+```{r, echo = F}
+dataportal <- "http://geodata-nisr.opendata.arcgis.com/datasets/"
+file1 <- "7083c6f446ae41c1bc69649f577f8a68_0.zip"
+file2 <- "1760c0baa0fa4f379e2a5f802e7001fc_0.zip"
+folder <- "/home/jal/Dropbox/teach/2017.1/spatialTutorial/data/"
+# # ONLY RUN LINES BELOW ONCE
+# download.file(paste0(dataportal, file1), paste0(folder, "rwandasectors/sectors.zip"))
+# unzip(paste0(folder, "rwandasectors/sectors.zip"), exdir = paste0(folder, "rwandasectors"))
+# file.remove(paste0(folder, "rwandasectors/sectors.zip"))
+# download.file(paste0(dataportal, file2), paste0(folder, "rwandaschool/school.zip"))
+# unzip(paste0(folder, "rwandaschool/school.zip"), exdir = paste0(folder, "rwandaschool"))
+# file.remove(paste0(folder, "rwandaschool/school.zip"))
+```
+
+```{r}
+list.files(paste0(folder, "rwandasectors/"))
+list.files(paste0(folder, "rwandaschool/"))
+```
+
+- Hint: "list.files" lists all of the files in a directory; paste0 concatenates strings
+
+2. Read each shapefile. The code below should produce the output below.
+
+```{r, echo = F, results = "hide", message = F, warning = F}
+library(sp)
+library(rgdal)
+library(rgeos)
+library(tidyverse)
+sectors <- readOGR(paste0(folder, "rwandasectors"), "Sector_Boundary_2006")
+school <- readOGR(paste0(folder, "rwandaschool"), "School_Establishments_2012")
+```
+
+```{r}
+plot(sectors, col = "grey", axes = T)
+plot(school, col = alpha("black", 0.2), pch = 20, add = T)
+```
+
+- Hint: You can use readOGR to read shapefiles; make sure the source is the folder the shapefile is in, and the layer name is the name of the shapefiles (the shapefile will consist of a bunch of files called "name.xyz", where "xyz" might be "shp", "dbf", ...)
+
+3. We're going to focus on a particular district to make things easier. Let's subset sectors and school so they just contain the sectors in Burera district. Do *not* use the "District" column of school. The code below should produce the following output.
+
+```{r, echo = F}
+sectors <- subset(sectors, District == "Burera")
+school <- subset(school, gIntersects(school, gUnaryUnion(sectors), byid = T) %>% as.logical)
+```
+
+```{r}
+plot(sectors, col = "grey", axes = T)
+plot(school, col = "black", pch = 20, add = T)
+```
+
+- Hint: First, take the subset of "sectors" where the sectors are in Burera. You can use the "District" column of "sectors" for this. Second, you want to find just the schools that "intersect" Burera district. Try running "gIntersects(school, sectors, byid = T)". Next, try running "gIntersects(school, gUnaryUnion(sectors), byid = T)". The function "dim" returns the dimension of a matrix. What is the dimension of the first output? What is the dimension of the second? How could you get from the first output to the second output? Apply the function "as.logical" to the second output - this converts it into a vector. Use this vector as the argument to "subset(school, .)" - this will take the subset of "school" where the point intersects the union of the sectors in Burera district.
+
+4. Challenge - we're now going to plot the distance of each point to the nearest secondary school. This part is harder, and will require learning some new tools. As a result, I'll leave most of the code visible here. Try running it line-by-line, and see if you can figure out what's going on.
+
+i. First, we'll want to reproject our data into UTM. Let's follow the approach we used in the notes, again using zone 35.
+    
+```{r, echo = F}
+sectors <- spTransform(sectors, "+proj=utm +zone=35 +datum=WGS84")
+school <- spTransform(school, "+proj=utm +zone=35 +datum=WGS84")
+```
+
+ii. Next, we need to take the subset of schools for which Highest_Ed is secondary. Try printing "unique(school$Highest_Ed)", how can we do that? A quick hint - "|" is the or operator in R, and uses infix notation. We'll want to store this in a new object; perhaps call it "secschool". After this, run the lines below to make sure everything's gone right so far.
+    
+```{r, echo = F}
+secschool <- subset(school, Highest_Ed == "Secondary A' Level" | Highest_Ed == "Secondary O' Level")
+```
+
+```{r}
+plot(sectors, col = "grey", axes = T)
+plot(school, col = "black", pch = 20, add = T)
+plot(secschool, col = "red", pch = 20, add = T)
+```
+
+iii. Next, we want to create a raster of the points in Burera district. A "raster" is a different type of spatial data - it's a grid of points, and values associated with each point in the grid. The "raster" library is useful for manipulating this type of data, make sure you install it using "install.packages". You should be able to run the code below. You'll get a warning that "implicit list embedding of S4 objects is deprecated"; this is related to the "sp" library being old and you shouldn't worry about it.
+    
+```{r, results = "hide", warning = F, message = F}
+library(raster)
+dgrid <- raster(extent(sectors))
+res(dgrid) <- 100
+dgrid <- rasterize(gUnaryUnion(sectors), dgrid)
+```
+
+iv. Next, we'll use gDistance to calculate the distance of each element of "dgrid" to "secschool". First, we'll need to convert "dgrid" to a "SpatialPoints" object. We'll want to use "subset" to focus on the points which are in Burera district (where as the raster contains all the points in the bbox of the district), but to do this we'll need to convert dgrid into a SpatialPointsDataFrame. Next, we'll get the distance matrix of the points of dgrid to secondary schools. We'll use "apply" to get the minimum of these distances for each point, and finally store these distances (after converting from a matrix to a vector) in dgrid\@data. We'll also divide by 1e3, to get it in kilometers (instead of meters). Note that these steps can take a few seconds to run - the "sp" library (which we're using) tends to be much slower than the function in the "raster" library. There are some ways to replace these steps with functions from the "raster" library, but they're a little less readable; as a result, we'll avoid them today.
+
+```{r}
+dgrid <- SpatialPoints(dgrid, sectors@proj4string)
+dgrid <- subset(SpatialPointsDataFrame(dgrid, data.frame(i = 1:length(dgrid))),
+                as.logical(gIntersects(dgrid, gUnaryUnion(sectors), byid = T)))
+dgriddists <- gDistance(dgrid, secschool, byid = T)
+dgriddists <- apply(dgriddists, MARGIN = 2, FUN = min)
+dgrid$dist <- as.numeric(dgriddists) / 1e3
+```
+
+v. Finally, we'll plot the output using ggplot (this is the fun part!). First, we'll need to get dgrid and secschool into data.frames, and we'll use some functions we learned about in the notes, plus some new ones.
+
+```{r}
+gdgrid <- data.frame(x = dgrid@coords[,"x"], y = dgrid@coords[,"y"], dist = dgrid$dist)
+gsecschool <- data.frame(x = secschool@coords[,1], y = secschool@coords[,2])
+ggplot(gdgrid) +
+  geom_tile(aes(x = x, y = y, fill = dist), col = NA) +
+  scale_fill_distiller(palette = "YlOrRd") +
+  geom_polygon(data = fortify(sectors), aes(x = long, y = lat, group = group), col = "black", fill = NA) +
+  geom_point(data = gsecschool, aes(x = x, y = y), col = "black") +
+  coord_equal() + theme_minimal() +
+  labs(x = "x", y = "y", fill = "Distance to\nsecondary school")
+```
+
+vi. And remember - if you don't know how to do something, Google it; someone's probably asked your question on stackexchange!
