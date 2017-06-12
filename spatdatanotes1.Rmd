@@ -1,5 +1,5 @@
 ---
-title: "Spatial data in R (Notes), Part 2"
+title: "Spatial data in R (Notes), Part 1"
 author: John Loeser
 date: June 12, 2017
 output: html_notebook
@@ -19,7 +19,7 @@ Visit [https://www.rstudio.com/](https://www.rstudio.com/) to install RStudio. R
 
 You'll see four panes. The top left is the editor. The bottom left is the console. The top right is the environment. The bottom right contains miscellaneous features, but primarily it's where plotting output will appear. Of the four, the one that's new to R relative to Stata is the environment - in Stata language, this the list of all macros you've created.
 
-You'll now be able to open spatialdatanotes.Rmd in RStudio. If you open that, you'll be able to both read through these notes and easily test out the code. It's best to follow along with that going forward.
+You'll now be able to open spatdatanotes1.Rmd in RStudio. If you open that, you'll be able to both read through these notes and easily test out the code. It's best to follow along with that going forward.
 
 4. "Hello world!"
 
@@ -69,7 +69,7 @@ x <- list(1, c(2, 3), list(4, c(5, 6)))
 print(x)
 ```
 
-x is a 3 element list. The first element is just "1" - a numeric vector of length 1. The second element is "c(2, 3)" - a numeric vector of length 2. The third element is "list(4, c(5, 6))" - a 2 element list, the first element of which is "4", and the second element of which is "c(5, 6)". Accessing elements of a list is slightly different from vectors
+x is a 3 element list. The first element is just "1" - a numeric vector of length 1. The second element is "c(2, 3)" - a numeric vector of length 2. The third element is "list(4, c(5, 6))" - a 2 element list, the first element of which is "4", and the second element of which is "c(5, 6)". Accessing elements of a list is slightly different from vectors.
 
 ```{r}
 # get a sublist
@@ -134,7 +134,7 @@ A->B A->G A->H B->C C->D D->E E->F
 ", height = 400)
 ```
 
-R's data structures for storing spatial data follows this approach. The most common object we'll be working with is a SpatialPolygonsDataFrame, which I'll refer to as an "SPDF". An SPDF has 3 main attributes (note that attributes are different from elements of a list or a vector - they are accessed using "\@"). First, "\@proj4string" stores the coordinate reference system ("CRS") of the shapefile. A CRS defines how coordinates relate to locations - for example, "+proj=longlat +datum=WGS84", the most common CRS you'll see, has coordinates as longitude and latitude. Other useful projections include equal area projections (see [https://www.youtube.com/watch?v=vVX-PrBRtTY](https://www.youtube.com/watch?v=vVX-PrBRtTY)) and, for analysis of relative small areas where the Earth is approximately flat, UTM (which gives coordinates in meters). 
+R's data structures for storing spatial data follows this approach. The most common object we'll be working with is a SpatialPolygonsDataFrame, which I'll refer to as an "SPDF". An SPDF has 3 main attributes (note that attributes are different from elements of a list or a vector - they are accessed using "\@"). First, "\@proj4string" stores the coordinate reference system ("CRS") of the shapefile. A CRS defines how coordinates relate to locations - for example, "+proj=longlat +datum=WGS84", the most common CRS you'll see, has coordinates as longitude and latitude. Other useful projections include equal area projections (see [https://www.youtube.com/watch?v=vVX-PrBRtTY](https://www.youtube.com/watch?v=vVX-PrBRtTY)) and, for analysis of relative small areas where the Earth is approximately flat, UTM (which gives coordinates in meters).
 
 ## Some simple examples
 
