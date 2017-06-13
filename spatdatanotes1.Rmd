@@ -108,7 +108,7 @@ print(df3)
 Libraries in R are the equivalent of packages in Stata. Installing libraries in R is typically straightforward. Two notable exceptions are two libraries we'll be using today - rgdal (used for reading shapefiles) and rgeos (used for manipulating shapefiles). The first thing to try is the easy approach, but this may not work.
 
 ```{r, results='hide', message=FALSE, warning=FALSE}
-# install.packages(c("sp", "rgdal", "rgeos", "tidyverse"))
+# install.packages(c("sp", "rgdal", "rgeos", "tidyverse", "‘DiagrammeR", "knitr"))
 ```
 
 You'll probably get an error. If you're on Mac, try [http://www.janosgyerik.com/installing-rgdal-in-r-on-os-x-mavericks/](http://www.janosgyerik.com/installing-rgdal-in-r-on-os-x-mavericks/) these instructions first. If those don't work, try [https://beanumber.github.io/sds192/rgdal-install.html](https://beanumber.github.io/sds192/rgdal-install.html). If you're on Windows, and this didn't work, install Linux. If you're on Linux, run "sudo apt-get update" then "sudo apt-get install libgdal-dev libproj-dev" in the console; after that, it should work.
